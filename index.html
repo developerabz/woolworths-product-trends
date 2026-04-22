@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Woolworths Price Trends</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #007837;
+      --green-light: #00a84f;
+      --green-dim: #004d24;
+      --cream: #f7f4ef;
+      --ink: #1a1a1a;
+      --muted: #6b7280;
+      --border: #e2ddd6;
+      --red: #c0392b;
+      --up: #c0392b;
+      --down: #007837;
+      --card: #ffffff;
+      --shadow: 0 2px 16px rgba(0,0,0,0.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--cream);
+      color: var(--ink);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--green);
+      padding: 2.5rem 2rem 2rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 20px,
+        rgba(255,255,255,0.03) 20px,
+        rgba(255,255,255,0.03) 21px
+      );
+    }
+    .header-eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      color: #fff;
+      line-height: 1.1;
+      position: relative;
+    }
+    h1 em {
+      font-style: italic;
+      color: rgba(255,255,255,0.75);
+    }
+    .header-sub {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.45);
+      margin-top: 0.5rem;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Search ── */
+    .search-wrap {
+      max-width: 640px;
+      margin: 2.5rem auto 0;
+      padding: 0 1.5rem;
+      position: relative;
+    }
+    .search-box {
+      width: 100%;
+      padding: 1rem 1.2rem 1rem 3rem;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      background: var(--card);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box:focus { border-color: var(--green); }
+    .search-icon {
+      position: absolute;
+      left: 2.7rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .search-hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 0.6rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Suggestions ── */
+    #suggestions {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      position: relative;
+      z-index: 10;
+    }
+    .suggestion-list {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .suggestion-item {
+      padding: 0.75rem 1.2rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background: var(--cream); }
+    .suggestion-item mark {
+      background: none;
+      color: var(--green);
+      font-weight: 500;
+    }
+    .no-results {
+      padding: 0.9rem 1.2rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ── Main content ── */
+    main {
+      max-width: 900px;
+      margin: 2.5rem auto 4rem;
+      padding: 0 1.5rem;
+    }
+
+    /* ── Status ── */
+    #status {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.04em;
+    }
+    #status.error { color: var(--red); }
+
+    /* ── Chart card ── */
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      animation: fadeUp 0.3s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .chart-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      line-height: 1.2;
+    }
+    .chart-meta {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+      letter-spacing: 0.03em;
+    }
+    .stats-row {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.8rem;
+    }
+    .stat-box {
+      flex: 1;
+      min-width: 130px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.9rem 1rem;
+    }
+    .stat-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .stat-value {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.5rem;
+    }
+    .stat-value.up   { color: var(--up); }
+    .stat-value.down { color: var(--down); }
+    .stat-change {
+      font-size: 0.68rem;
+      margin-top: 0.15rem;
+    }
+    .stat-change.up   { color: var(--up); }
+    .stat-change.down { color: var(--down); }
+    canvas { width: 100% !important; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 5rem 2rem;
+      color: var(--muted);
+    }
+    .empty-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.3;
+    }
+    .empty-state p {
+      font-size: 0.82rem;
+      line-height: 1.7;
+    }
+
+    /* ── Loading ── */
+    .loading-bar {
+      height: 2px;
+      background: var(--green);
+      width: 0%;
+      transition: width 0.4s ease;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+    }
+    .loading-bar.done { opacity: 0; transition: opacity 0.3s 0.2s; }
+  </style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+
+<header>
+  <div class="header-eyebrow">Australia &nbsp;·&nbsp; Grocery Retail</div>
+  <h1>Woolworths <em>Price Trends</em></h1>
+  <div class="header-sub">18-month historical price movement</div>
+
+  <div class="search-wrap">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input
+      class="search-box"
+      id="searchInput"
+      type="text"
+      placeholder="Search a product, e.g. Sugar Free Gum…"
+      autocomplete="off"
+      spellcheck="false"
+    />
+  </div>
+  <div class="search-hint">type 3+ characters to browse · press enter or click to view trend</div>
+</header>
+
+<div id="suggestions"></div>
+
+<main>
+  <div id="status"></div>
+  <div id="chartArea">
+    <div class="empty-state">
+      <div class="empty-icon">📈</div>
+      <p>Search for a Woolworths product above<br>to see its price trend over the last 18 months.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Config ──────────────────────────────────────────────
+const DATA_FILE = './prices.xlsx'; // relative to index.html
+const COL = {
+  product:  'product',
+  oldPrice: 'old_price',
+  newPrice: 'new_price',
+  date:     'date',
+};
+
+// ── State ────────────────────────────────────────────────
+let allRows   = [];   // raw parsed rows [{Product, Old Price, New Price, Date}]
+let chartInst = null;
+
+// ── Boot ─────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', loadExcel);
+
+async function loadExcel() {
+  const bar = document.getElementById('loadingBar');
+  bar.style.width = '40%';
+  setStatus('Loading price data…');
+  try {
+    const resp = await fetch(DATA_FILE);
+    if (!resp.ok) throw new Error(`Could not fetch ${DATA_FILE} (${resp.status})`);
+    bar.style.width = '70%';
+    const ab   = await resp.arrayBuffer();
+    const wb   = XLSX.read(ab, { type: 'array', cellDates: true, cellText: false });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    allRows    = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+    bar.style.width = '100%';
+    bar.classList.add('done');
+    setStatus(`${allRows.length.toLocaleString()} price records loaded`);
+  } catch (err) {
+    bar.classList.add('done');
+    setStatus('⚠ ' + err.message, true);
+  }
+}
+
+// ── Search input ─────────────────────────────────────────
+const input       = document.getElementById('searchInput');
+const suggestBox  = document.getElementById('suggestions');
+let debounceTimer;
+
+input.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => handleInput(input.value.trim()), 120);
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    clearSuggestions();
+    const q = input.value.trim();
+    if (q.length >= 1) showChart(q);
+  }
+  if (e.key === 'Escape') clearSuggestions();
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#suggestions') && !e.target.closest('.search-wrap')) {
+    clearSuggestions();
+  }
+});
+
+function handleInput(q) {
+  if (q.length < 3) { clearSuggestions(); return; }
+  const matches = getMatches(q, 10);
+  renderSuggestions(matches, q);
+}
+
+// ── Matching ─────────────────────────────────────────────
+function getMatches(query, limit) {
+  const q = query.toLowerCase();
+  const seen = new Set();
+  const results = [];
+  for (const row of allRows) {
+    const name = String(row[COL.product] || '').trim();
+    if (!seen.has(name) && name.toLowerCase().includes(q)) {
+      seen.add(name);
+      results.push(name);
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+// ── Suggestions UI ───────────────────────────────────────
+function renderSuggestions(matches, query) {
+  if (!matches.length) {
+    suggestBox.innerHTML = `<div class="suggestion-list"><div class="no-results">No products found for "${escHtml(query)}"</div></div>`;
+    return;
+  }
+  const q = query.toLowerCase();
+  const items = matches.map(name => {
+    const idx  = name.toLowerCase().indexOf(q);
+    const hi   = escHtml(name.slice(0, idx))
+               + `<mark>${escHtml(name.slice(idx, idx + query.length))}</mark>`
+               + escHtml(name.slice(idx + query.length));
+    return `<div class="suggestion-item" data-name="${escHtml(name)}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ${hi}
+    </div>`;
+  }).join('');
+  suggestBox.innerHTML = `<div class="suggestion-list">${items}</div>`;
+  suggestBox.querySelectorAll('.suggestion-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const name = el.dataset.name;
+      input.value = name;
+      clearSuggestions();
+      showChart(name);
+    });
+  });
+}
+
+function clearSuggestions() { suggestBox.innerHTML = ''; }
+
+// ── Chart rendering ───────────────────────────────────────
+function showChart(itemName) {
+  const rows = allRows
+    .filter(r => String(r[COL.product] || '').trim().toLowerCase() === itemName.toLowerCase())
+    .map(r => ({
+      date:     r[COL.date],
+      oldPrice: parseFloat(r[COL.oldPrice]) || 0,
+      newPrice: parseFloat(r[COL.newPrice]) || 0,
+    }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  if (!rows.length) {
+    setStatus(`No data found for "${itemName}"`, true);
+    return;
+  }
+
+
+  const labels    = rows.map(r => formatDate(r.date));
+  const oldPrices = rows.map(r => r.oldPrice);
+  const newPrices = rows.map(r => r.newPrice);
+
+  // Stats
+  const firstOld = oldPrices[0];
+  const lastNew  = newPrices[newPrices.length - 1];
+  const change   = lastNew - firstOld;
+  const pct      = firstOld ? ((change / firstOld) * 100).toFixed(1) : '—';
+  const direction = change >= 0 ? 'up' : 'down';
+  const minP = Math.min(...oldPrices, ...newPrices);
+  const maxP = Math.max(...oldPrices, ...newPrices);
+
+  setStatus('');
+
+  document.getElementById('chartArea').innerHTML = `
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">${escHtml(itemName)}</div>
+          <div class="chart-meta">${rows.length} price records · ${labels[0]} → ${labels[labels.length-1]}</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Starting Price</div>
+          <div class="stat-value">$${firstOld.toFixed(2)}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Current Price</div>
+          <div class="stat-value ${direction}">$${lastNew.toFixed(2)}</div>
+          <div class="stat-change ${direction}">${change >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% over 18 months</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Range</div>
+          <div class="stat-value" style="font-size:1.1rem">$${minP.toFixed(2)} – $${maxP.toFixed(2)}</div>
+        </div>
+      </div>
+      <canvas id="priceChart"></canvas>
+    </div>`;
+
+  if (chartInst) chartInst.destroy();
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const green = '#007837';
+  const greenLight = 'rgba(0,120,55,0.12)';
+  const red = '#c0392b';
+  const redLight = 'rgba(192,57,43,0.10)';
+
+  chartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Old Price',
+          data: oldPrices,
+          borderColor: red,
+          backgroundColor: redLight,
+          borderWidth: 2,
+          borderDash: [4, 3],
+          pointRadius: 3,
+          pointBackgroundColor: red,
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: 'New Price',
+          data: newPrices,
+          borderColor: green,
+          backgroundColor: greenLight,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: green,
+          fill: true,
+          tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            font: { family: "'DM Mono', monospace", size: 11 },
+            color: '#6b7280',
+            boxWidth: 24,
+            padding: 16,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          titleFont: { family: "'DM Mono', monospace", size: 11 },
+          bodyFont:  { family: "'DM Mono', monospace", size: 12 },
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 10 },
+            color: '#9ca3af',
+            maxRotation: 45,
+          },
+          grid: { color: 'rgba(0,0,0,0.04)' },
+        },
+        y: {
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 10 },
+            color: '#9ca3af',
+            callback: v => '$' + v.toFixed(2),
+          },
+          grid: { color: 'rgba(0,0,0,0.04)' },
+        }
+      }
+    }
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+
+  return isNaN(dt) ? d : dt.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
+}
+
+function setStatus(msg, isError = false) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = isError ? 'error' : '';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
