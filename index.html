@@ -379,7 +379,7 @@
 
 <script>
 // ── Config ──────────────────────────────────────────────
-const DATA_FILE = './prices.xlsx'; // relative to index.html
+const DATA_FILE = './data-by-product.json'; // relative to index.html
 const COL = {
   product:  'product',
   oldPrice: 'old_price',
@@ -388,13 +388,13 @@ const COL = {
 };
 
 // ── State ────────────────────────────────────────────────
-let allRows   = [];   // raw parsed rows [{Product, Old Price, New Price, Date}]
+let allRows   = {};   // raw parsed rows [{Product, Old Price, New Price, Date}]
 let chartInst = null;
 
 // ── Boot ─────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', loadExcel);
+window.addEventListener('DOMContentLoaded', loadJSON);
 
-async function loadExcel() {
+async function loadJSON() {
 
   const fill    = document.getElementById('spinnerFill');
   const label   = document.getElementById('overlayLabel');
@@ -409,23 +409,28 @@ async function loadExcel() {
     label.textContent = 'Parsing records…';
 
     
-    const ab   = await resp.arrayBuffer();
+    allRows = await resp.json();
     fill.style.width = '85%';
     label.textContent = 'Building index…';
+    // console.log(resp)
+
+    // console.log(ab)
+    
 
 
-    const wb   = XLSX.read(ab, { type: 'array', cellDates: true, cellText: false });
-    const ws   = wb.Sheets[wb.SheetNames[0]];
-    allRows    = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+
+
+    //const wb   = XLSX.read(ab, { type: 'array', cellDates: true, cellText: false });
     
     fill.style.width = '100%';
-    label.textContent = `${allRows.length.toLocaleString()} records ready`;
+    
+    label.textContent = `${Object.keys(allRows).length.toLocaleString()} products ready!`;
 
     // small pause so the "100% / ready" state is visible before fade
     await new Promise(r => setTimeout(r, 380));
     overlay.classList.add('hidden');
 
-    setStatus(`${allRows.length.toLocaleString()} price records loaded`);
+    // setStatus(`${allRows.length.toLocaleString()} price records loaded`);
   } catch (err) {
 
 
@@ -473,8 +478,8 @@ function getMatches(query, limit) {
   const q = query.toLowerCase();
   const seen = new Set();
   const results = [];
-  for (const row of allRows) {
-    const name = String(row[COL.product] || '').trim();
+  for (const k of Object.keys(allRows)) {
+    const name = k.trim();
     if (!seen.has(name) && name.toLowerCase().includes(q)) {
       seen.add(name);
       results.push(name);
@@ -516,8 +521,10 @@ function clearSuggestions() { suggestBox.innerHTML = ''; }
 
 // ── Chart rendering ───────────────────────────────────────
 function showChart(itemName) {
-  const rows = allRows
-    .filter(r => String(r[COL.product] || '').trim().toLowerCase() === itemName.toLowerCase())
+  
+
+    //.filter(r => String(r[COL.product] || '').trim().toLowerCase() === itemName.toLowerCase())
+  const rows = allRows[itemName]
     .map(r => ({
       date:     r[COL.date],
       oldPrice: parseFloat(r[COL.oldPrice]) || 0,
@@ -531,11 +538,13 @@ function showChart(itemName) {
   }
 
 
-  const labels    = rows.map(r => formatDate(r.date));
+  const labels    = rows.map(r => r.date);
   const oldPrices = rows.map(r => r.oldPrice);
   const newPrices = rows.map(r => r.newPrice);
 
   // Stats
+  const firstDate = formatDate(labels[0])
+  const lastDate = formatDate(labels[labels.length-1])
   const firstOld = oldPrices[0];
   const lastNew  = newPrices[newPrices.length - 1];
   const change   = lastNew - firstOld;
@@ -551,7 +560,7 @@ function showChart(itemName) {
       <div class="chart-header">
         <div>
           <div class="chart-title">${escHtml(itemName)}</div>
-          <div class="chart-meta">${rows.length} price records · ${labels[0]} → ${labels[labels.length-1]}</div>
+          <div class="chart-meta">${rows.length} price records · ${firstDate} → ${lastDate}</div>
         </div>
       </div>
       <div class="stats-row">
@@ -628,6 +637,7 @@ function showChart(itemName) {
           bodyFont:  { family: "'DM Mono', monospace", size: 12 },
           callbacks: {
             label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`,
+            title: ctx => `${formatLocaleDate(ctx[0].label)}`
           }
         }
       },
@@ -637,6 +647,7 @@ function showChart(itemName) {
             font: { family: "'DM Mono', monospace", size: 10 },
             color: '#9ca3af',
             maxRotation: 45,
+            callback: v => `${formatDate(labels[v])}`,
           },
           grid: { color: 'rgba(0,0,0,0.04)' },
         },
@@ -659,6 +670,14 @@ function formatDate(d) {
   const dt = new Date(d);
 
   return isNaN(dt) ? d : dt.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
+}
+
+function formatLocaleDate(d) {
+if (!d) return '';
+  const dt = new Date(d);
+
+  return isNaN(dt) ? d : dt.toLocaleDateString('en-AU');
+
 }
 
 function setStatus(msg, isError = false) {

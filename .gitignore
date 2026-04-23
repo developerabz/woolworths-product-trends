@@ -1,0 +1,3 @@
+package*.json
+convert/
+node_modules/
